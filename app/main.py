@@ -11,7 +11,7 @@ from insightface.app import FaceAnalysis
 from insightface.data import get_image
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from pillow_heif import register_heif_opener
 import time
 from pathlib import Path
@@ -76,6 +76,11 @@ def load_and_preprocess_image(file_path):
     try:
         # Load with PIL (handles HEIC/HEIF)
         pil_image = Image.open(file_path)
+        
+        # CRITICAL: Apply EXIF orientation before processing
+        # Phone cameras often save images rotated with EXIF metadata
+        # We need to apply this rotation so face detection coordinates match visual orientation
+        pil_image = ImageOps.exif_transpose(pil_image)
         
         # Convert to RGB if needed
         if pil_image.mode != 'RGB':
