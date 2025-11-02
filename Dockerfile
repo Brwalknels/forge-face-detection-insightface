@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     libheif-dev \
     libgl1 \
     libglib2.0-0 \
-    execstack \
+    patchelf \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -24,9 +24,9 @@ COPY requirements.txt .
 # InsightFace models will be downloaded on first run
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Clear executable stack flag from ONNX Runtime shared library
-# This fixes the "cannot enable executable stack" error on systems with strict security
-RUN execstack -c /usr/local/lib/python3.11/site-packages/onnxruntime/capi/*.so || true
+# Clear executable stack flag from ONNX Runtime shared library using patchelf
+# This fixes the "cannot enable executable stack" error on systems with strict security policies
+RUN find /usr/local/lib/python3.11/site-packages/onnxruntime/capi -name "*.so" -exec patchelf --remove-needed '' {} \; || true
 
 # Copy application code
 COPY app/ ./app/
