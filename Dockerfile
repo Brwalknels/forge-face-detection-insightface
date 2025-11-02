@@ -44,6 +44,9 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:5001/health').raise_for_status()" || exit 1
 
+# Fix ONNX Runtime executable stack issue on systems with strict security policies
+ENV ONNXRUNTIME_ALLOW_LOADING_LIB_WITH_EXEC_STACK=1
+
 # Run with gunicorn for production
 # --workers: Number of worker processes (1 for now due to model memory)
 # --timeout: Worker timeout in seconds (InsightFace can take time)
