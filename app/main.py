@@ -50,8 +50,11 @@ def initialize_face_app():
             name='buffalo_l',  # Large model pack (includes RetinaFace + ArcFace)
             providers=['CPUExecutionProvider']  # Use CPU (add CUDAExecutionProvider for GPU)
         )
-        face_app.prepare(ctx_id=0, det_size=DETECTION_SIZE)
+        # det_size: detection resolution (640x640 - good balance of speed/accuracy)
+        # det_thresh: minimum detection score (0.5 default, higher = fewer false positives)
+        face_app.prepare(ctx_id=0, det_size=DETECTION_SIZE, det_thresh=0.5)
         logger.info("✓ InsightFace initialized successfully (RetinaFace + ArcFace)")
+        logger.info(f"Detection threshold: 0.5 (adjustable via API)")
     except Exception as e:
         logger.error(f"Failed to initialize InsightFace: {e}", exc_info=True)
         raise
@@ -183,12 +186,18 @@ def detect_faces():
         # Detect faces with InsightFace
         detected_faces = face_app.get(image)
         
+        # Log all detected faces with scores for debugging
+        if detected_faces:
+            scores = [f"{face.det_score:.3f}" for face in detected_faces]
+            logger.info(f"Detected {len(detected_faces)} face(s) with scores: {', '.join(scores)}")
+        
         # Filter by confidence threshold
         if detected_faces:
             filtered_faces = [face for face in detected_faces if face.det_score >= min_confidence]
             filtered_count = len(detected_faces) - len(filtered_faces)
             if filtered_count > 0:
-                logger.info(f"Filtered {filtered_count} low-confidence detection(s) (threshold: {min_confidence})")
+                filtered_scores = [f"{face.det_score:.3f}" for face in detected_faces if face.det_score < min_confidence]
+                logger.info(f"Filtered {filtered_count} low-confidence detection(s): {', '.join(filtered_scores)} (threshold: {min_confidence})")
             detected_faces = filtered_faces
         
         if not detected_faces:
