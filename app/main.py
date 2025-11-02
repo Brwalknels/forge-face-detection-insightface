@@ -176,8 +176,20 @@ def detect_faces():
             logger.error(f"Failed to load image {file_path}: {str(e)}")
             return jsonify({'error': f'Failed to load image: {str(e)}'}), 400
         
+        # Get confidence threshold from request (default 0.5 for InsightFace - stricter than dlib)
+        min_confidence = data.get('min_confidence', 0.5)
+        logger.info(f"Using confidence threshold: {min_confidence}")
+        
         # Detect faces with InsightFace
         detected_faces = face_app.get(image)
+        
+        # Filter by confidence threshold
+        if detected_faces:
+            filtered_faces = [face for face in detected_faces if face.det_score >= min_confidence]
+            filtered_count = len(detected_faces) - len(filtered_faces)
+            if filtered_count > 0:
+                logger.info(f"Filtered {filtered_count} low-confidence detection(s) (threshold: {min_confidence})")
+            detected_faces = filtered_faces
         
         if not detected_faces:
             logger.info(f"No faces detected in {file_id}")
