@@ -179,7 +179,18 @@ def detect_faces():
         
         # Load and preprocess image
         try:
+            # Get original image dimensions before resizing
+            with Image.open(file_path) as pil_img:
+                pil_img = ImageOps.exif_transpose(pil_img)
+                original_width, original_height = pil_img.size
+            
             image = load_and_preprocess_image(file_path)
+            processed_height, processed_width = image.shape[:2]
+            
+            # Calculate scale factor for coordinate conversion
+            scale_x = original_width / processed_width
+            scale_y = original_height / processed_height
+            logger.info(f"Image scaling: original={original_width}x{original_height}, processed={processed_width}x{processed_height}, scale=({scale_x:.2f}, {scale_y:.2f})")
         except Exception as e:
             logger.error(f"Failed to load image {file_path}: {str(e)}")
             return jsonify({'error': f'Failed to load image: {str(e)}'}), 400
@@ -222,16 +233,24 @@ def detect_faces():
             bbox = face.bbox.astype(int)
             left, top, right, bottom = bbox[0], bbox[1], bbox[2], bbox[3]
             
+            # CRITICAL: Scale coordinates back to original image size
+            # Face detection was done on resized image, but thumbnails use original size
+            left = int(left * scale_x)
+            top = int(top * scale_y)
+            right = int(right * scale_x)
+            bottom = int(bottom * scale_y)
+            
             # Face landmarks (5 points: left_eye, right_eye, nose, mouth_left, mouth_right)
             landmarks = face.kps.astype(int) if face.kps is not None else None
             landmarks_dict = {}
             if landmarks is not None:
+                # Scale landmarks back to original image size
                 landmarks_dict = {
-                    'left_eye': (int(landmarks[0][0]), int(landmarks[0][1])),
-                    'right_eye': (int(landmarks[1][0]), int(landmarks[1][1])),
-                    'nose': (int(landmarks[2][0]), int(landmarks[2][1])),
-                    'mouth_left': (int(landmarks[3][0]), int(landmarks[3][1])),
-                    'mouth_right': (int(landmarks[4][0]), int(landmarks[4][1]))
+                    'left_eye': (int(landmarks[0][0] * scale_x), int(landmarks[0][1] * scale_y)),
+                    'right_eye': (int(landmarks[1][0] * scale_x), int(landmarks[1][1] * scale_y)),
+                    'nose': (int(landmarks[2][0] * scale_x), int(landmarks[2][1] * scale_y)),
+                    'mouth_left': (int(landmarks[3][0] * scale_x), int(landmarks[3][1] * scale_y)),
+                    'mouth_right': (int(landmarks[4][0] * scale_x), int(landmarks[4][1] * scale_y))
                 }
             
             # Face embedding (512-dimensional ArcFace vector)
