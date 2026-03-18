@@ -1,44 +1,48 @@
 # Forge Face Detection - InsightFace Edition
 
-Advanced face detection microservice using InsightFace (RetinaFace + ArcFace) for superior accuracy and fewer false positives compared to dlib.
+InsightFace worker for Forge. This service is intended to run as a separate TrueNAS SCALE app and exposes only `/health` and `/detect`.
 
 ## Features
 
-- **RetinaFace Detector**: Industry-leading face detection with high accuracy and low false positive rate
-- **ArcFace Recognition**: 512-dimensional face embeddings for superior face recognition
-- **Better Quality**: Significantly reduces false positives (trees, sky, objects detected as faces)
-- **Age & Gender**: Optional age and gender estimation
-- **Production Ready**: Used in commercial face recognition systems worldwide
+- RetinaFace detection with ArcFace embeddings
+- 512-dimensional face descriptors
+- Optional age and gender estimates
+- HEIC and EXIF orientation support
+- Simple HTTP worker API for Forge
 
 ## Quick Start
 
-### Docker Deployment (TrueNAS SCALE)
+### Recommended TrueNAS SCALE Deployment
 
-1. **Deploy via TrueNAS GUI:**
-   - Go to Apps → Discover Apps → Custom App
+1. Deploy this as its own TrueNAS app:
    - App Name: `forge-face-detection-insightface`
    - Image Repository: `ghcr.io/brwalknels/forge-face-detection-insightface`
    - Image Tag: `latest`
-   - Port: `5001` (host) → `5001` (container)
+   - Host Port: `5001`
+   - Container Port: `5001`
 
-2. **Connect to Forge network:**
-   ```bash
-   docker network connect forge-network forge-face-detection-insightface
-   ```
+2. Mount the same photo dataset Forge uses:
+   - Host path: `/mnt/pool/mastersync/private`
+   - Container path: `/app/private`
+   - Access: read-only
 
-3. **Configure in Forge Admin:**
-   - Go to Admin → Face Detection
-   - Change Detection Model to "InsightFace (Accurate, Slow)"
-   - Save settings
+3. In Forge Admin -> Face Detection, set:
+   - Worker URL: `http://YOUR-TRUENAS-IP:5001`
+   - Background Processing Enabled: on
+   - Auto-Process New Gallery Photos: on
+
+No Docker reconnect step is required. Forge should talk to this worker over one stable URL.
 
 ## API Endpoints
 
 ### Health Check
+
 ```bash
-GET http://forge-face-detection-insightface:5001/health
+GET http://YOUR-TRUENAS-IP:5001/health
 ```
 
 Response:
+
 ```json
 {
   "status": "ready",
@@ -51,8 +55,9 @@ Response:
 ```
 
 ### Detect Faces
+
 ```bash
-POST http://forge-face-detection-insightface:5001/detect
+POST http://YOUR-TRUENAS-IP:5001/detect
 Content-Type: application/json
 
 {
@@ -62,6 +67,7 @@ Content-Type: application/json
 ```
 
 Response:
+
 ```json
 {
   "fileId": "uuid",
@@ -76,14 +82,7 @@ Response:
         "width": 150,
         "height": 150
       },
-      "descriptor": [0.123, -0.456, ...],  // 512-dimensional
-      "landmarks": {
-        "left_eye": [180, 130],
-        "right_eye": [220, 130],
-        "nose": [200, 160],
-        "mouth_left": [185, 190],
-        "mouth_right": [215, 190]
-      },
+      "descriptor": [0.123, -0.456],
       "confidence": 0.98,
       "age": 25,
       "gender": "male"
@@ -94,55 +93,37 @@ Response:
 }
 ```
 
-## Performance
+## Notes
 
-- **Processing Time**: 2-5 seconds per photo (CNN model: 1-3 seconds)
-- **Accuracy**: 99%+ face detection accuracy (vs 95% for dlib)
-- **False Positives**: <1% (vs 5-10% for dlib)
-- **Embedding Size**: 512-dim (vs 128-dim for dlib)
-- **Memory**: ~1.5GB RAM per worker (vs ~500MB for dlib)
-
-## Model Comparison
-
-| Feature | dlib CNN | InsightFace |
-|---------|----------|-------------|
-| Detection Model | CNN | RetinaFace |
-| Recognition Model | ResNet | ArcFace |
-| Embedding Size | 128-dim | 512-dim |
-| False Positives | 5-10% | <1% |
-| Processing Time | 1-3s | 2-5s |
-| Memory | 500MB | 1.5GB |
-| Age/Gender | ❌ | ✅ |
-| Production Use | Research | Commercial |
+- Embedding size is `512`, so existing 128-dimensional face indexes from the older system must be rebuilt.
+- The worker opens the exact `filePath` sent by Forge, so the shared photo dataset must be mounted at the same in-container path.
+- Forge owns the queue, person records, labeling, and auto-assign logic. This worker only detects faces and returns embeddings.
 
 ## Environment Variables
 
-- `MAX_IMAGE_SIZE`: Maximum image dimension (default: 2000px)
+- `MAX_IMAGE_SIZE`: Maximum image dimension before resize, default `2000`
 
 ## Building Locally
 
 ```bash
-# Build image
 docker build -t ghcr.io/brwalknels/forge-face-detection-insightface:latest .
-
-# Push to registry
 docker push ghcr.io/brwalknels/forge-face-detection-insightface:latest
 ```
 
 ## Troubleshooting
 
 ### Models Not Downloading
-InsightFace downloads models (~300MB) on first run. This takes 1-2 minutes. Check logs:
+
+InsightFace downloads models on first run. This can take a minute or two. Check logs:
+
 ```bash
 docker logs forge-face-detection-insightface
 ```
 
 ### High Memory Usage
-InsightFace models are larger than dlib. Ensure at least 2GB RAM available per worker.
+
+InsightFace models are larger than the old face stack. Plan for roughly 2 GB of available RAM for comfortable operation.
 
 ### Slow Processing
-InsightFace prioritizes accuracy over speed. For faster processing, use dlib CNN model.
 
-## License
-
-InsightFace is licensed under MIT License.
+This worker prioritizes accuracy over speed. Tune Forge's rate limit and processing schedule if you want gentler background usage.
